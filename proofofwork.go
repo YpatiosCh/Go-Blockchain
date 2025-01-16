@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	MaxNonce = 1000000
+	MaxNonce = 10000000
 )
 
-const targetBits = 240
+const targetBits = 12
 
 // ProofOfWork represents a proof-of-work
 type ProofOfWork struct {
@@ -68,7 +68,6 @@ func (pow *ProofOfWork) Run() (int, []byte) {
 	for nonce < MaxNonce {
 		// Combine block data with current nonce
 		data := pow.prepareData(nonce)
-
 		// Calculate hash of our data using SHA256
 		hash = sha256.Sum256(data)
 
