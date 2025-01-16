@@ -1,17 +1,18 @@
 package main
 
-type BlockChain struct {
+// Blockchain keeps a sequence of Blocks
+type Blockchain struct {
 	blocks []*Block
 }
 
-// AddBlock adds a new block to the blockchain
-func (bc *BlockChain) AddBlock(data string) {
-	prevBlock := bc.blocks[len(bc.blocks)-1]   // Get the last block
-	newBlock := NewBlock(data, prevBlock.Hash) // Create a new block
-	bc.blocks = append(bc.blocks, newBlock)    // Append the new block to the blockchain
+// AddBlock saves provided data as a block in the blockchain
+func (bc *Blockchain) AddBlock(data string) {
+	prevBlock := bc.blocks[len(bc.blocks)-1]
+	newBlock := NewBlock(data, prevBlock.Hash)
+	bc.blocks = append(bc.blocks, newBlock)
 }
 
-// NewBlockChain creates a new blockchain with the genesis block
-func NewBlockChain() *BlockChain {
-	return &BlockChain{[]*Block{NewGenesisBlock()}}
+// NewBlockchain creates a new Blockchain with genesis Block
+func NewBlockchain() *Blockchain {
+	return &Blockchain{[]*Block{NewGenesisBlock()}}
 }
