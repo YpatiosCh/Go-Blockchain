@@ -7,27 +7,40 @@ import (
 	"math/big"
 )
 
+// Global variables defining the proof-of-work parameters
 var (
-	MaxNonce = 10000000
+	// maxNonce defines the maximum value the nonce can take.
+	// If a solution isn't found after maxNonce iterations,
+	// the mining process stops.
+	maxNonce = 10000000
 )
 
+// targetBits defines the difficulty of mining. The higher this number,
+// the easier it is to mine a block. The lower the number, the harder it becomes.
+// In Bitcoin, this value is adjusted every 2016 blocks to maintain a consistent
+// block generation time of about 10 minutes.
 const targetBits = 12
 
-// ProofOfWork represents a proof-of-work
+// ProofOfWork represents a proof-of-work system similar to the one used in Bitcoin.
+// It ensures that a significant amount of computational work has been invested in
+// creating a new block, making it difficult to alter the blockchain.
 type ProofOfWork struct {
-	block  *Block
-	target *big.Int
+	block  *Block   // The block to mine
+	target *big.Int // The target threshold that the hash must be less than
 }
 
-// NewProofOfWork builds and returns a ProofOfWork
+// NewProofOfWork builds and returns a ProofOfWork instance for a given block.
+// It calculates the target value based on the targetBits difficulty.
+// The target is calculated as: target = 1 << (256 - targetBits)
+// This means the hash of the block must be below this target to be valid.
 func NewProofOfWork(b *Block) *ProofOfWork {
-	// Setting up how difficult it should be to mine a block:
-	// 1. Start with the number 1
-	// 2. Move this 1 to the left by (256 - targetBits) spaces
-	// For example, if targetBits is 24, we move 1 to the left by (256-24 = 232) spaces
-	// This creates a really big number that the hash must be smaller than
-	// The more we move to the left, the smaller this number gets, making mining harder
+	// Create a new big integer with value 1
 	target := big.NewInt(1)
+
+	// Left shift by (256 - targetBits) positions
+	// 256 is used because SHA-256 hash is 256 bits long
+	// For example, if targetBits = 12, we shift by 244 positions
+	// This creates our target threshold
 	target.Lsh(target, uint(256-targetBits))
 
 	pow := &ProofOfWork{b, target}
@@ -35,75 +48,79 @@ func NewProofOfWork(b *Block) *ProofOfWork {
 	return pow
 }
 
-// prepareData prepares data that will be hashed
+// prepareData combines the block data with the nonce to create
+// the data that will be hashed. This implements the core mining algorithm:
+// hash(prevHash + transactions + timestamp + targetBits + nonce)
+// Parameters:
+//   - nonce: The current nonce value being tested
+//
+// Returns:
+//   - []byte: The combined data ready for hashing
 func (pow *ProofOfWork) prepareData(nonce int) []byte {
 	data := bytes.Join(
 		[][]byte{
-			pow.block.PrevBlockHash,
-			pow.block.Data,
-			IntToHex(pow.block.Timestamp),
-			IntToHex(int64(targetBits)),
-			IntToHex(int64(nonce)),
+			pow.block.PrevBlockHash,       // Previous block's hash
+			pow.block.HashTransactions(),  // Hash of all transactions in the block
+			IntToHex(pow.block.Timestamp), // Block timestamp
+			IntToHex(int64(targetBits)),   // Mining difficulty
+			IntToHex(int64(nonce)),        // Current nonce value
 		},
-		[]byte{},
+		[]byte{}, // Separator (empty in this case)
 	)
 
 	return data
 }
 
-// Run performs the proof-of-work mining process to find a valid hash
+// Run performs the actual proof-of-work computation.
+// It continuously hashes the block data with different nonce values
+// until it finds a hash that's less than the target.
 // Returns:
-//   - nonce: The number that made our hash valid
-//   - hash: The valid hash that was found
+//   - int: The nonce that produced a valid hash
+//   - []byte: The valid hash that was found
 func (pow *ProofOfWork) Run() (int, []byte) {
-	// Create variables we'll use in mining:
-	var hashInt big.Int // For converting our hash into a number we can compare
-	var hash [32]byte   // To store the actual hash we calculate
-	nonce := 0          // Our "guess" counter starting at 0
+	var hashInt big.Int // Used to store the hash as a big integer for comparison
+	var hash [32]byte   // Stores the current hash value
+	nonce := 0          // Starting nonce value
 
-	// Show what data we're trying to mine
-	fmt.Printf("Mining the block containing \"%s\"\n", pow.block.Data)
-
-	// Keep trying nonces until we hit the maximum allowed tries
-	for nonce < MaxNonce {
-		// Combine block data with current nonce
+	fmt.Printf("Mining a new block")
+	for nonce < maxNonce {
+		// Prepare the data with the current nonce
 		data := pow.prepareData(nonce)
-		// Calculate hash of our data using SHA256
+
+		// Calculate the SHA-256 hash
 		hash = sha256.Sum256(data)
+		fmt.Printf("\r%x", hash) // Display mining progress
 
-		// Show the hash we're currently trying (the \r returns to start of line)
-		fmt.Printf("\r%x", hash)
-
-		// Convert the hash to a big integer so we can compare it
+		// Convert hash to big integer for comparison with target
 		hashInt.SetBytes(hash[:])
 
-		// Check if this hash is valid (less than our target)
-		// -1 means hashInt is less than target (we found a valid hash!)
+		// Compare hash with target
+		// If hash < target, we've found a valid nonce
 		if hashInt.Cmp(pow.target) == -1 {
-			// Valid hash found - stop mining
 			break
 		} else {
-			// Hash wasn't valid - try next number
-			nonce++
+			nonce++ // Try next nonce value
 		}
 	}
-
-	// Add newlines for clean output formatting
 	fmt.Print("\n\n")
 
-	// Return the winning nonce and its hash
-	// hash[:] converts our fixed size array to a slice
 	return nonce, hash[:]
 }
 
-// Validate validates block's PoW
+// Validate verifies whether a block's proof-of-work is valid.
+// It recalculates the hash using the block's nonce and checks if
+// it's below the target threshold.
+// Returns:
+//   - bool: true if the proof-of-work is valid, false otherwise
 func (pow *ProofOfWork) Validate() bool {
 	var hashInt big.Int
 
+	// Recreate the hash using the block's stored nonce
 	data := pow.prepareData(pow.block.Nonce)
 	hash := sha256.Sum256(data)
 	hashInt.SetBytes(hash[:])
 
+	// Check if hash is less than target
 	isValid := hashInt.Cmp(pow.target) == -1
 
 	return isValid
